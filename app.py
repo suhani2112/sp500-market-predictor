@@ -1,32 +1,32 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import precision_score
+import requests # Naya import
 
-# Page configuration
-st.set_page_config(page_title="S&P 500 Predictor", page_icon="📈")
-
-st.title("S&P 500 Price Movement Predictor")
-st.markdown("""
-This app predicts whether the **S&P 500 (^GSPC)** will close higher tomorrow than it did today using a Random Forest model.
-""")
-
-# --- 1. DATA LOADING ---
+# --- 1. DATA LOADING (Updated for Rate Limit Fix) ---
 @st.cache_data
 def load_data():
-    sp500 = yf.Ticker("^GSPC")
-    data = sp500.history(period="max")
-    # Clean-up logic from your notebook
+    # Yahoo Finance ko lagna chahiye ki ye ek real browser hai
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
+    # Session create karein headers ke sath
+    session = requests.Session()
+    session.headers.update(headers)
+    
+    # Ticker ko session pass karein
+    sp500 = yf.Ticker("^GSPC", session=session)
+    
+    # "max" ki jagah "10y" ya "5y" use karein taaki data kam load ho (Rate limit se bachne ke liye)
+    data = sp500.history(period="10y") 
+    
     if "Dividends" in data.columns: del data["Dividends"]
     if "Stock Splits" in data.columns: del data["Stock Splits"]
     
-    # Create target (1 if tomorrow's price is higher than today's)
     data["Tomorrow"] = data["Close"].shift(-1)
     data["Target"] = (data["Tomorrow"] > data["Close"]).astype(int)
-    return data.loc["1990-01-01":].copy()
-
-data = load_data()
+    return data.copy()
 
 # --- 2. MODEL SETUP ---
 # Predictors established in your notebook
