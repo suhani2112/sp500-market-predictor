@@ -1,45 +1,52 @@
-from sklearn.ensemble import RandomForestClassifier
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import requests # Naya import
+import requests
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import precision_score
 
-# --- 1. DATA LOADING (Updated for Rate Limit Fix) ---
+# Page Config
+st.set_page_config(page_title="S&P 500 Predictor", layout="wide")
+
+st.title("📈 S&P 500 Market Direction Predictor")
+
+# --- 1. DATA LOADING FUNCTION ---
 @st.cache_data
 def load_data():
-    # Yahoo Finance ko lagna chahiye ki ye ek real browser hai
+    # Yahoo Finance rate limit se bachne ke liye headers
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
-    
-    # Session create karein headers ke sath
     session = requests.Session()
     session.headers.update(headers)
     
-    # Ticker ko session pass karein
     sp500 = yf.Ticker("^GSPC", session=session)
+    # 10 saal ka data kaafi hai prediction ke liye
+    df = sp500.history(period="10y")
     
-    # "max" ki jagah "10y" ya "5y" use karein taaki data kam load ho (Rate limit se bachne ke liye)
-    data = sp500.history(period="10y") 
+    # Data cleaning
+    if "Dividends" in df.columns: del df["Dividends"]
+    if "Stock Splits" in df.columns: del df["Stock Splits"]
     
-    if "Dividends" in data.columns: del data["Dividends"]
-    if "Stock Splits" in data.columns: del data["Stock Splits"]
+    df["Tomorrow"] = df["Close"].shift(-1)
+    df["Target"] = (df["Tomorrow"] > df["Close"]).astype(int)
     
-    data["Tomorrow"] = data["Close"].shift(-1)
-    data["Target"] = (data["Tomorrow"] > data["Close"]).astype(int)
-    return data.copy()
+    return df.dropna().copy()
 
-# --- 2. MODEL SETUP ---
-# Predictors established in your notebook
+# Function call karke 'data' variable banana
+data = load_data()
+
+# --- 2. MODEL SETUP & TRAINING ---
 predictors = ["Close", "Volume", "Open", "High", "Low"]
 model = RandomForestClassifier(n_estimators=100, min_samples_split=100, random_state=1)
 
-# Training on all but the last 100 days for live testing
+# Training aur Testing data split
 train = data.iloc[:-100]
 test = data.iloc[-100:]
+
 model.fit(train[predictors], train["Target"])
 
-# --- 3. LIVE PREDICTION ---
+# --- 3. LIVE PREDICTION UI ---
 st.subheader("Today's Market Analysis")
 last_row = data.iloc[-1:]
 current_price = last_row["Close"].iloc[0]
@@ -61,7 +68,7 @@ with col2:
     st.write(f"**Model Confidence:** {confidence:.2%}")
     st.progress(confidence)
 
-# --- 4. MODEL PERFORMANCE ---
+# --- 4. HISTORICAL PERFORMANCE ---
 st.divider()
 st.subheader("Historical Model Accuracy")
 test_preds = model.predict(test[predictors])
