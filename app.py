@@ -1,7 +1,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import requests
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import precision_score
 
@@ -10,19 +9,12 @@ st.set_page_config(page_title="S&P 500 Predictor", layout="wide")
 
 st.title("📈 S&P 500 Market Direction Predictor")
 
-# --- 1. DATA LOADING FUNCTION ---
+# --- 1. DATA LOADING (Simplified for YF Update) ---
 @st.cache_data
 def load_data():
-    # Yahoo Finance rate limit se bachne ke liye headers
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-    session = requests.Session()
-    session.headers.update(headers)
-    
-    sp500 = yf.Ticker("^GSPC", session=session)
-    # 10 saal ka data kaafi hai prediction ke liye
-    df = sp500.history(period="10y")
+    # Hum session aur headers hata rahe hain kyunki yfinance ab ise khud handle karta hai
+    # 'yf.download' use karna zyada stable hai
+    df = yf.download("^GSPC", period="10y")
     
     # Data cleaning
     if "Dividends" in df.columns: del df["Dividends"]
@@ -33,14 +25,13 @@ def load_data():
     
     return df.dropna().copy()
 
-# Function call karke 'data' variable banana
+# Function call
 data = load_data()
 
 # --- 2. MODEL SETUP & TRAINING ---
 predictors = ["Close", "Volume", "Open", "High", "Low"]
 model = RandomForestClassifier(n_estimators=100, min_samples_split=100, random_state=1)
 
-# Training aur Testing data split
 train = data.iloc[:-100]
 test = data.iloc[-100:]
 
@@ -49,7 +40,7 @@ model.fit(train[predictors], train["Target"])
 # --- 3. LIVE PREDICTION UI ---
 st.subheader("Today's Market Analysis")
 last_row = data.iloc[-1:]
-current_price = last_row["Close"].iloc[0]
+current_price = float(last_row["Close"].iloc[0])
 
 prediction = model.predict(last_row[predictors])[0]
 proba = model.predict_proba(last_row[predictors])[0]
@@ -66,7 +57,7 @@ with col1:
 with col2:
     confidence = proba[1] if prediction == 1 else proba[0]
     st.write(f"**Model Confidence:** {confidence:.2%}")
-    st.progress(confidence)
+    st.progress(float(confidence))
 
 # --- 4. HISTORICAL PERFORMANCE ---
 st.divider()
